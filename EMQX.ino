@@ -1,21 +1,26 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
-#include "SSD1306Wire.h"
+#include <SSD1306Wire.h>
+#include <string>
+#include <Ticker.h>
 #include <Servo.h>
 Servo myservo;
+Ticker flipper;
 int pos = 0;
 
 SSD1306Wire display(0x3c, SDA, SCL);
 // WiFi
-// const char *ssid = "Nanami0721"; // Enter your WiFi name
-// const char *password = "yuzusoft";  // Enter WiFi password
-const char *ssid = "0d000721";
-const char *password = "147258369";
+const char *ssid = "Nanami0721"; // Enter your WiFi name
+const char *password = "yuzusoft";  // Enter WiFi password
+// const char *ssid = "0d000721";
+// const char *password = "147258369";
+const char *ssid_ntp = "IAA";
+const char *password_ntp = "147258369";
 
 // MQTT Broker
 const char *mqtt_broker = "broker.emqx.io"; // broker address
-const char *topic_pub = "/esp0721"; // define topic pub
-const char *topic_sub = "/esp0722";
+const char *topic_sub = "/esp0721";
+const char *topic_pub = "/esp0722"; // define topic pub
 const char *mqtt_username = "emqx"; // username for authentication
 const char *mqtt_password = "public"; // password for authentication
 const int mqtt_port = 1883; // port of MQTT over TCP
@@ -42,9 +47,19 @@ void setup() {
     WiFi.begin(ssid, password);
     display.drawString(0, 0, "Connecting to " + String(ssid));
     display.display();
-    while (WiFi.status() != WL_CONNECTED) {
+    // while (WiFi.status() != WL_CONNECTED) {
+    //     delay(500);
+    //     Serial.printf(".");
+    // }
+    for(int i=0,j=20; WiFi.status() != WL_CONNECTED ;i+=2){
         delay(500);
         Serial.printf(".");
+        display.setPixel(i, j);
+        if(i >= 64){
+            i = 0;
+            j += 10;
+        }
+        display.display();
     }
     display.clear();
     // display.drawString(0, 0, "Connected to  " + String(ssid));
@@ -70,14 +85,25 @@ void setup() {
     display.clear();
 
     // publish and subscribe
-    const char *sendbuf = "terminal online";
+    const char *sendbuf = "LEVY9 online";
     Serial.printf("Topic_pub name:%s\n",topic_pub);
     Serial.printf("Topic_sub name:%s\n",topic_sub);
     client.subscribe(topic_sub);
     client.publish(topic_pub, sendbuf);
     Serial.printf("message sent:%s\n",sendbuf);
 
+    flipper.attach(30, flip);   //定时器
 }
+
+
+void flip() {
+    // const char* systime = (char*)millis();
+    String a = "LEVY9 运行时间：" + String(millis() / 1000) + "s";
+    const char* systime = a.c_str();
+    client.publish(topic_pub, systime);
+    Serial.printf("sent:%s",a);
+}
+
 
 void callback(char *topic, byte *payload, unsigned int length) {
     // Serial.print("Message arrived in topic: ");
@@ -101,7 +127,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
             myservo.write(pos); 
             delay(15);
         }
-        delay(1500);    //等待电流扭矩到位
+        delay(2000);    //等待电流扭矩到位
         myservo.write(0);   //复位
         client.publish(topic_pub, "启动完成，复位完成");
         display.clear();
@@ -125,6 +151,7 @@ void callback(char *topic, byte *payload, unsigned int length) {
 }
 
 void reconnect(){
+    display.clear();
     Serial.println("Reconnecting...");
     display.drawString(0, 0, "Reconnecting...");
     display.display();
@@ -137,7 +164,8 @@ void reconnect(){
         } else {
             Serial.print("Reconnect failed with state ");
             Serial.print(client.state());
-            display.drawString(0, 0, "mqtt re fail:" + String(client.state()));
+            display.drawString(0, 20, "mqtt re fail:" + String(client.state()));
+            display.display();
             delay(5000);
         }
     }
@@ -157,6 +185,10 @@ void loop() {
     display.drawString(0, 20, "pub:" + String(topic_pub));
     display.drawString(0, 30, "sub:" + String(topic_sub));
     display.drawHorizontalLine(0, 41, 64);
+    display.setTextAlignment(TEXT_ALIGN_RIGHT);
+    String syssec = String(millis() / 1000) + "s";
+    display.drawString(128, 0, "syssec");
+    display.setTextAlignment(TEXT_ALIGN_LEFT);
 
     display.display();
 }
